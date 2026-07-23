@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>审计总数估算器</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+        }
+        .container {
+            max-width: 700px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            font-size: 24px;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 15px;
+        }
+        .intro {
+            background-color: #e8f4f8;
+            padding: 15px 20px;
+            border-left: 5px solid #3498db;
+            margin-bottom: 25px;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #2980b9;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #34495e;
+        }
+        input[type="number"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        input[type="number"]:focus {
+            border-color: #3498db;
+            outline: none;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            box-shadow: 0 4px 6px rgba(39, 174, 96, 0.2);
+        }
+        button:hover {
+            background-color: #219653;
+        }
+        .result-card {
+            margin-top: 30px;
+            padding: 25px;
+            background-color: #fcfdfe;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            display: none;
+        }
+        .result-card h3 {
+            margin-top: 0;
+            color: #27ae60;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px dashed #eee;
+        }
+        .result-item:last-child {
+            border-bottom: none;
+        }
+        .val {
+            font-weight: bold;
+            font-size: 18px;
+            color: #e74c3c;
+        }
+        .audit-advice {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #fff9e6;
+            border-left: 4px solid #f1c40f;
+            font-size: 14px;
+            color: #7f8c8d;
+        }
+        .math-note {
+            font-size: 12px;
+            color: #95a5a6;
+            margin-top: 30px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>审计总数估算器</h1>
+    
+    <div class="intro">
+        <strong>审计应用场景：</strong><br>
+        在存货清点或发票等资产审计中，若物品具有连续的序列号（或审计员在抽盘时发放了连续的盘点标签），只需随机抽样清点一部分资产，即可精准估算资产总体数量，以验证企业账面申报的总量是否在合理的误差置信区间内。
+    </div>
+
+    <div class="form-group">
+        <label for="k">已清点数量 / 抽样样本量 (k)</label>
+        <input type="number" id="k" placeholder="例如：15" min="1" step="1">
+    </div>
+    
+    <div class="form-group">
+        <label for="m">当前发现的最大编号 (m)</label>
+        <input type="number" id="m" placeholder="例如：240" min="1" step="1">
+    </div>
+
+    <button onclick="calculate()">开始估算与生成审计区间</button>
+
+    <div id="result-box" class="result-card">
+        <h3>审计估算结果</h3>
+        <div class="result-item">
+            <span>总体数量估计值 :</span>
+            <span id="res-est" class="val"></span>
+        </div>
+        <div class="result-item">
+            <span>标准差 :</span>
+            <span id="res-std" class="val" style="color: #2980b9;"></span>
+        </div>
+        <div class="result-item">
+            <span><strong>3个标准差</strong> 置信范围:</span>
+            <span id="res-range" class="val" style="color: #8e44ad;"></span>
+        </div>
+        
+        <div class="audit-advice">
+            <strong> 审计结论参考建议：</strong><br>
+            根据切比雪夫不等式与统计分布，<strong>3个标准差的置信范围极其可靠</strong>。如果企业账面记录的存货总数落在此区间 <span id="res-range-text" style="font-weight:bold;"></span> 内，统计学上没有充分证据怀疑其造假；如果大幅偏离该范围（尤其低于最大观测编号 <span id="res-m"></span>），则大概率存在错报漏报，建议立即扩大抽盘比例或进行全面盘点。
+        </div>
+    </div>
+    
+    <div class="math-note">
+        <strong>核心公式：</strong><br>
+        估计值 (MVUE): N = m + (m / k) - 1 <br>
+        方差估计: Var(N) = [(N - k) * (N + 1)] / [k * (k + 2)] <br>
+        3σ下限 = max(m, 估计值 - 3σ) ； 3σ上限 = 估计值 + 3σ
+    </div>
+</div>
+
+<script>
+    function calculate() {
+        // 获取用户输入
+        const k = parseInt(document.getElementById('k').value, 10);
+        const m = parseInt(document.getElementById('m').value, 10);
+        
+        // 数据校验
+        if (isNaN(k) || isNaN(m) || k <= 0 || m <= 0) {
+            alert("请输入有效的正整数！");
+            return;
+        }
+        if (k > m) {
+            alert("逻辑错误：已清点数量 (k) 绝不可能大于观测到的最大编号 (m)！");
+            return;
+        }
+        
+        // 1. 估计总体总数 (N) - 最小方差无偏估计
+        let N_est = m + (m / k) - 1;
+        
+        // 2. 计算方差及标准差
+        // 方差公式: ((N - k) * (N + 1)) / (k * (k + 2))
+        let variance = ((N_est - k) * (N_est + 1)) / (k * (k + 2));
+        let std_dev = Math.sqrt(variance);
+        
+        // 3. 计算 3 个标准差的置信区间 (3-Sigma)
+        let margin_of_error = 3 * std_dev;
+        
+        // 计算下限：统计学下限是 N_est - 3σ，但在物理/审计逻辑上，总数绝不可能低于已观测到的最大编号 m
+        let lower_bound = Math.floor(N_est - margin_of_error);
+        lower_bound = Math.max(m, lower_bound); 
+        
+        // 计算上限
+        let upper_bound = Math.ceil(N_est + margin_of_error);
+        
+        // 如果清点数与最大编号相等，说明已经全部被清点完毕
+        if(k === m) {
+            std_dev = 0;
+            lower_bound = m;
+            upper_bound = m;
+        }
+
+        // 4. 更新前端 UI 显示
+        document.getElementById('res-est').innerText = Math.round(N_est) + " 件 (精确值: " + N_est.toFixed(2) + ")";
+        document.getElementById('res-std').innerText = std_dev.toFixed(2);
+        
+        const rangeStr = `[ ${lower_bound} , ${upper_bound} ]`;
+        document.getElementById('res-range').innerText = rangeStr;
+        document.getElementById('res-range-text').innerText = rangeStr;
+        document.getElementById('res-m').innerText = m;
+        
+        // 展开结果卡片
+        document.getElementById('result-box').style.display = 'block';
+    }
+</script>
+
+</body>
+</html>
